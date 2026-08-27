@@ -1,0 +1,15 @@
+[Unit]
+Description=Lian Li daemon (built from source; drives the 8.8" screen + LED ring)
+# No After=multi-user.target: this unit is WantedBy=multi-user.target, so ordering after it
+# creates a cycle (dash -> daemon -> multi-user -> dash) that systemd resolves by DELETING
+# the dashboard's start job at boot — the panel silently never starts.
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=@DAEMON_BIN@ --log-level info
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

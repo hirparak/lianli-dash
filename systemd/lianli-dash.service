@@ -1,0 +1,23 @@
+[Unit]
+Description=lianli-dash metrics collector (feeds the lianli-daemon template)
+After=lianli-daemon.service coolercontrold.service
+Wants=lianli-daemon.service
+
+[Service]
+Type=simple
+WorkingDirectory=@DASH_DIR@
+# Template mode: the daemon renders the dashboard itself; this unit only feeds the
+# metric files the template's command sensors read. (The PIL renderer, dash.py,
+# remains as a fallback for the non-template path.)
+#
+# This runs as root because the daemon's IPC socket is root-owned — which means
+# "~" here is /root. The config and background loops belong to the desktop user,
+# so point at them explicitly rather than letting XDG resolve to root's home.
+Environment=DASH_CONFIG_DIR=@CONFIG_DIR@
+Environment=DASH_DATA_DIR=@DATA_DIR@
+ExecStart=/usr/bin/python3 @DASH_DIR@/collect.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
