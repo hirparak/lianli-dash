@@ -804,6 +804,16 @@ def s_cl_header(ctx, y):
     return y + 66
 
 
+def _dial_row2(ctx, y, size, left, right, gap=10):
+    """Two dials side by side at an explicit size (the fixed-222 _dial_row above
+    predates the simplified cluster pages, which use a smaller temperature dial)."""
+    span = ctx.CW - size * 2
+    for (did, title, source, kw), x in ((left, ctx.PAD),
+                                        (right, ctx.PAD + size + span)):
+        _dial(ctx.ws, did, title, source, x, y, size, **kw)
+    return y + size + gap
+
+
 def _dial_row(ctx, y, left, right, gap=10):
     """Two dials side by side; left/right are (id, title, source, kwargs)."""
     D = 222
@@ -870,6 +880,92 @@ def s_cd_strip(ctx, y):
         ws.append(bar(f"vb{i}", cat(f"gpu{i}_vram_pct"), PAD + 238, y + 6 + i * 20,
                       206, 10, ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
     return y + 50
+
+
+def _dial_wide(ctx, y, did, title, source, size, gap=8, **kw):
+    """A single dial centred across the full column. Two-across caps at ~222px,
+    which is barely larger than the old layout — going full width is what makes
+    the headline dials actually readable from across the room."""
+    _dial(ctx.ws, did, title, source, ctx.PAD + (ctx.CW - size) // 2, y, size, **kw)
+    return y + size + gap
+
+
+# ── simplified cluster sections (cardash / steampunk) ────────────────────────
+# The dial-cluster themes had 14 gauges competing on one 480px column, six of
+# them 142px mini-dials whose labels were unreadable over a busy background.
+# These sections keep only what is worth a glance: three big activity dials,
+# memory as bars (a bar reads faster than a gauge for "how full"), and the
+# temperatures and pump smaller underneath. No sparklines.
+ACT = 302          # headline activity dials, full width
+TMP = 212          # temperature dials, two across
+PUMPD = 216        # pump, centred on its own row
+
+
+def s_cq_activity(ctx, y):
+    y = _dial_wide(ctx, y, "qg0", "GPU 0",
+                   {"type": "nvidia_gpu", "gpu_index": 0, "metric": "usage"},
+                   ACT, vmax=100, unit="%", value_size=48, title_size=25)
+    y = _dial_wide(ctx, y, "qg1", "GPU 1",
+                   {"type": "nvidia_gpu", "gpu_index": 1, "metric": "usage"},
+                   ACT, vmax=100, unit="%", value_size=48, title_size=25)
+    return _dial_wide(ctx, y, "qcp", "CPU", {"type": "cpu_usage"},
+                      ACT, vmax=100, unit="%", value_size=48, title_size=25)
+
+
+def s_cq_mem(ctx, y):
+    """VRAM per GPU and system RAM as bars — 'how full' is a length, not an angle."""
+    PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
+    rows = (("VRAM 0", cat("gpu0_vram_pct")), ("VRAM 1", cat("gpu1_vram_pct")),
+            ("RAM", cat("ram_pct")))
+    for i, (lbl, src) in enumerate(rows):
+        ws.append(label(f"qml{i}", lbl, PAD, y + 2, 86, 22, size=15, color=DIM))
+        # a bar shows "how full" at a glance; the number answers "how full exactly"
+        ws.append(bar(f"qmb{i}", src, PAD + 92, y + 4, CW - 160, 18,
+                      ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
+        ws.append(value(f"qmv{i}", src, PAD + CW - 62, y, 62, 24, size=17,
+                        unit="%", align="right", color=FG))
+        y += 32
+    return y + 12
+
+
+def s_cq_temps(ctx, y):
+    y = _dial_row2(ctx, y, TMP,
+                   ("qtc", "CPU °C", cat("cpu_temp"),
+                    dict(vmax=100, unit="°", vmin=20.0, redline=0.75)),
+                   ("qtl", "COOLANT", cat("coolant"),
+                    dict(vmax=60, unit="°", vmin=20.0, redline=0.62)))
+    return _dial_row2(ctx, y, TMP,
+                      ("qt0", "GPU 0 °C",
+                       {"type": "nvidia_gpu", "gpu_index": 0, "metric": "temp"},
+                       dict(vmax=100, unit="°", vmin=20.0, redline=0.8)),
+                      ("qt1", "GPU 1 °C",
+                       {"type": "nvidia_gpu", "gpu_index": 1, "metric": "temp"},
+                       dict(vmax=100, unit="°", vmin=20.0, redline=0.8)))
+
+
+def s_cq_pump(ctx, y):
+    return _dial_wide(ctx, y, "qpm", "PUMP", cat("pump_rpm"), PUMPD,
+                      vmax=6000, redline=0.9, value_size=30)
+
+
+def s_cq_infer(ctx, y):
+    """Compact inference readout — only drawn on the combined page while llama or
+    comfy is actually working, so the simplified themes do not go blind on the
+    thing the fire background is signalling."""
+    PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
+    if ctx.mode == "comfy":
+        ws.append(label("qin", "COMFYUI  " + (ctx.comfy_job or "—")[:20], PAD, y,
+                        CW, 22, size=14, color=DIM, align="center"))
+        ws.append(value("qiv", cat("comfy_pct"), PAD, y + 26, CW, 60, size=54,
+                        align="center", color=RED, unit="%", vmax=100.0))
+        return y + 92
+    ws.append(label("qin", "LLAMA.CPP  " + (ctx.slot_names[0] or "—")[:20], PAD, y,
+                    CW, 22, size=14, color=DIM, align="center"))
+    ws.append(value("qiv", cat("llm_tps"), PAD, y + 24, CW, 68, size=64,
+                    align="center", color=RED, vmax=1000.0))
+    ws.append(label("qil", "TOKENS / SEC", PAD, y + 94, CW, 18, size=11,
+                    align="center"))
+    return y + 118
 
 
 def s_cd_cluster_comfy(ctx, y):
@@ -1140,30 +1236,23 @@ PAGES = {
         Sec("gpu1", "GPU 1", P(s_gpu, i=1, spark_h=150)),
         Sec("lf_system", "System stats", s_lf_system),
     ],
+    # Simplified dial cluster: three big activity dials, memory as bars, then
+    # temperatures and pump. The combined page adds a compact inference readout
+    # while llama/comfy is working; system is the pure hardware view.
     "combined.cluster": [
         Sec("cl_header", "Header + clock", s_cl_header),
-        Sec("cl_gpu_util", "GPU dials", s_cl_gpu_util),
-        Sec("cl_gpu_temp", "GPU temp dials", s_cl_gpu_temp),
-        Sec("cl_cpu", "CPU dials", s_cl_cpu),
-        Sec("cl_coolant_flow", "Coolant + flow dials", s_cl_coolant_flow),
-        Sec("cl_minis", "Fan mini-dials", s_cl_minis),
-        Sec("cd_strip", "Case + VRAM strip", s_cd_strip),
-        Sec("cd_cluster_comfy", "Job cluster", s_cd_cluster_comfy,
-            modes={"comfy"}),
-        Sec("cd_cluster_llama", "Speed cluster", s_cd_cluster_llama,
-            modes={"llama"}),
-        Sec("cd_spark", "History graph", s_cd_spark, flex=True, min_h=50),
+        Sec("cq_activity", "Activity dials", s_cq_activity),
+        Sec("cq_mem", "VRAM + RAM bars", s_cq_mem),
+        Sec("cq_infer", "Inference readout", s_cq_infer, modes={"llama", "comfy"}),
+        Sec("cq_temps", "Temperature dials", s_cq_temps),
+        Sec("cq_pump", "Pump dial", s_cq_pump),
     ],
     "system.cluster": [
         Sec("cl_header", "Header + clock", s_cl_header),
-        Sec("cl_gpu_util", "GPU dials", s_cl_gpu_util),
-        Sec("cl_gpu_temp", "GPU temp dials", s_cl_gpu_temp),
-        Sec("cl_cpu", "CPU dials", s_cl_cpu),
-        Sec("cl_coolant_flow", "Coolant + flow dials", s_cl_coolant_flow),
-        Sec("cl_minis", "Fan mini-dials", s_cl_minis),
-        Sec("cs_ram_case", "RAM + case dials", s_cs_ram_case),
-        Sec("cs_vram", "VRAM bars", s_cs_vram),
-        Sec("cs_history", "History graph", s_cs_history, flex=True, min_h=70),
+        Sec("cq_activity", "Activity dials", s_cq_activity),
+        Sec("cq_mem", "VRAM + RAM bars", s_cq_mem),
+        Sec("cq_temps", "Temperature dials", s_cq_temps),
+        Sec("cq_pump", "Pump dial", s_cq_pump),
     ],
     "comfy_full.cluster": [
         Sec("cl_header", "Header + clock", s_cl_header),
