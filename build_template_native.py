@@ -447,40 +447,41 @@ def s_lf2_cpu(ctx, y):
 
 
 def s_lf2_infer(ctx, y):
-    """The star of the page: tok/s huge, the loaded models by name, and a 2x2
-    metrics grid. Vertical gaps are computed from the remaining panel height so
-    the grid lands at the bottom edge — no dead space (the system page lesson,
-    measured at 278px there, applied from the start here)."""
+    """Inference, big and self-explanatory: TOK/S and PREFILL side by side with
+    headings above, the loaded models at readable size with their own labelled
+    rates, and the remaining metrics in an equal-weight grid at the bottom.
+    No lamps or sparklines — liveness is evident from the rates themselves."""
     PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
+    half = CW // 2
     ROW = 168
-    TPS_H, CAP_H, SLOT_H = 240, 40, 60
-    fixed = TPS_H + CAP_H + 2 * SLOT_H + 2 * ROW
-    gap = max(24, (1908 - y - fixed) // 2)   # two internal gaps; grid lands flush
-    # headline decode rate with liveness lamp
-    ws.append(value(f"{ctx.sid}tps", cat("llm_tps"), PAD, y, CW, TPS_H,
-                    size=150, color=RED, align="center", vmax=1000.0))
-    ws.append(label(f"{ctx.sid}tl", "TOK / S", PAD, y + TPS_H + 4, CW - 60, 32,
-                    size=26, color=DIM, align="center"))
-    ws.append(bar(f"{ctx.sid}lamp", cat("llm_live"), PAD + CW - 48,
-                  y + TPS_H + 12, 30, 12, vmax=2.0, ranges=LAMP))
-    y += TPS_H + CAP_H + gap
-    # loaded models: baked names (value_text is numeric-only), per-slot rate
+    HEAD_H, SLOT_H = 200, 72
+    fixed = HEAD_H + 2 * SLOT_H + 2 * ROW
+    gap = max(24, (1908 - y - fixed) // 2)
+    # headline pair: decode + prefill, headings above
+    for n, (lbl, metric, col) in enumerate((("TOK / S", "llm_tps", RED),
+                                            ("PREFILL T/S", "llm_prefill", DIM))):
+        x = PAD + n * half
+        ws.append(label(f"{ctx.sid}h{n}", lbl, x, y, half, 32, size=24,
+                        color=DIM, align="center"))
+        ws.append(value(f"{ctx.sid}hv{n}", cat(metric), x, y + 36, half, 150,
+                        size=104, color=col, align="center", vmax=100000.0,
+                        fmt="{:.0}"))
+    y += HEAD_H + gap
+    # loaded models: big names (baked — value_text is numeric-only), each with
+    # its own decode rate labelled in t/s
     for i in range(2):
         nm = (ctx.slot_names[i] if i < len(ctx.slot_names) else "—") or "—"
-        ws.append(label(f"{ctx.sid}m{i}", nm[:24], PAD, y + 12, CW - 150, 32,
-                        size=20, color=FG))
-        ws.append(value(f"{ctx.sid}mt{i}", cat(f"llm{i}_tps"), PAD + CW - 148,
-                        y + 4, 108, 44, size=32, color=DIM, align="right",
-                        vmax=1000.0))
-        ws.append(bar(f"{ctx.sid}mlp{i}", cat(f"llm{i}_live"), PAD + CW - 30,
-                      y + 18, 22, 10, vmax=2.0, ranges=LAMP))
+        ws.append(label(f"{ctx.sid}m{i}", nm[:20], PAD, y + 10, CW - 128, 40,
+                        size=28, color=FG))
+        ws.append(value(f"{ctx.sid}mt{i}", cat(f"llm{i}_tps"), PAD + CW - 124,
+                        y + 8, 124, 44, size=32, unit=" t/s", color=DIM,
+                        align="right", vmax=1000.0))
         y += SLOT_H
     y += gap
     # 2x2 metrics grid, equal weights (the thermal-grid pattern)
-    half = CW // 2
-    cells = ((0, 0, "PREFILL T/S", "llm_prefill", "{:.0}", None),
-             (1, 0, "ACCEPT", "llm_accept", "{:.0}", "%"),
-             (0, 1, "CTX K", "llm_ctx", "{:.0}", None),
+    cells = ((0, 0, "ACCEPT", "llm_accept", "{:.0}", "%"),
+             (1, 0, "CTX K", "llm_ctx", "{:.0}", None),
+             (0, 1, "TOTAL K", "llm_total", "{:.0}", None),
              (1, 1, "TOK / W", "llm_tokw", "{:.1}", None))
     for cx_i, cy_i, lbl, metric, fmt, unit in cells:
         x = PAD + cx_i * half
@@ -488,7 +489,7 @@ def s_lf2_infer(ctx, y):
         ws.append(label(f"{ctx.sid}g{cx_i}{cy_i}", lbl, x, cy, half, 30,
                         size=22, color=DIM, align="center"))
         ws.append(value(f"{ctx.sid}gv{cx_i}{cy_i}", cat(metric), x, cy + 34,
-                        half, 110, size=80, unit=unit or "", vmax=100000.0,
+                        half, 110, size=80, unit=unit or "", vmax=1000000.0,
                         fmt=fmt, align="center", color=FG))
     return y + 2 * ROW
 
