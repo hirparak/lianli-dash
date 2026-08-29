@@ -217,6 +217,13 @@ def bar(id_, source, x, y, width, height, vmax=100.0, ranges=None):
              x, y, width, height, update_interval_ms=1000)
 
 
+def vbar(id_, source, x, y, width, height, vmax=100.0, ranges=None):
+    return w(id_, {"type": "vertical_bar", "source": source, "value_min": 0.0,
+                   "value_max": vmax, "background_color": BARBG,
+                   "corner_radius": 4.0, "ranges": ranges or RANGES_LOAD},
+             x, y, width, height, update_interval_ms=1000)
+
+
 def spark(id_, source, x, y, width, height, vmax=100.0, color=None):
     c = color or COOL
     return w(id_, {"type": "sparkline", "source": source, "value_min": 0.0, "value_max": vmax,
@@ -282,78 +289,87 @@ def fan_minis(banks):
     return tuple(out[:6])
 
 
-# ── system page v2 (2026-08-29): a pure numbers card, no sparklines ──────────
-# Full-height, big-type layout: each engine block gives its usage a huge value
-# with watts/temp stacked beside it; memory gets fat bars; thermals a 2x2 grid.
+# ── system page v3 (2026-08-29, Kieran's layout): per engine a HUGE centred
+# percentage flanked by two vertical memory bars, watts+temp side by side
+# beneath; then large coolant (small flow under) beside large chassis (small
+# room under); thin separators so nothing blends. No sparklines. ─────────────
+
+def s_sys_sep(ctx, y):
+    ctx.ws.append(label(f"{ctx.sid}sep", "─" * 30, ctx.PAD, y, ctx.CW, 16,
+                        size=12, color=DIM, align="center"))
+    return y + 26
+
 
 def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
-                 temp="cpu_temp", wmax=500.0, tranges=None):
-    PAD, ws = ctx.PAD, ctx.ws
-    y = ctx.sect(y, title)
-    y += 6
-    # headline usage
-    ws.append(label(f"{ctx.sid}ul", "USAGE", PAD, y, 120, 20, size=13))
-    ws.append(value(f"{ctx.sid}uv", cat(util), PAD, y + 20, 230, 96, size=80,
-                    unit="%", color=FG, vmax=100.0, ranges=RANGES_LOAD))
-    # watts + temp stacked right
-    ws.append(label(f"{ctx.sid}wl", "WATTS", PAD + 258, y, 120, 18, size=13))
-    ws.append(value(f"{ctx.sid}wv", cat(watts), PAD + 258, y + 18, 190, 52,
-                    size=44, unit="W", color=DIM, vmax=wmax))
-    ws.append(label(f"{ctx.sid}tl", "TEMP", PAD + 258, y + 78, 120, 18, size=13))
-    ws.append(value(f"{ctx.sid}tv", cat(temp), PAD + 258, y + 96, 190, 52,
-                    size=44, unit="°", vmax=100.0,
+                 temp="cpu_temp", mem="ram_pct", memlbl="RAM", wmax=500.0,
+                 tranges=None):
+    PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
+    ws.append(label(f"{ctx.sid}t", title, PAD, y, 200, 26, size=17, color=DIM))
+    y += 30
+    BARW, BARH = 44, 300
+    # flanking memory bars, one each side of the big number
+    ws.append(vbar(f"{ctx.sid}bl", cat(mem), PAD, y, BARW, BARH,
+                   ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
+    ws.append(vbar(f"{ctx.sid}br", cat(mem), PAD + CW - BARW, y, BARW, BARH,
+                   ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
+    ws.append(label(f"{ctx.sid}bll", memlbl, PAD - 4, y + BARH + 4, BARW + 8,
+                    18, size=11, align="center"))
+    ws.append(label(f"{ctx.sid}brl", memlbl, PAD + CW - BARW - 4, y + BARH + 4,
+                    BARW + 8, 18, size=11, align="center"))
+    # the big number, centred between the bars
+    ws.append(value(f"{ctx.sid}u", cat(util), PAD + BARW + 8, y + 66,
+                    CW - 2 * BARW - 16, 150, size=104, unit="%", color=FG,
+                    align="center", vmax=100.0, ranges=RANGES_LOAD))
+    y += BARH + 28
+    # watts + temp, horizontal beneath
+    half = CW // 2
+    ws.append(label(f"{ctx.sid}wl", "WATTS", PAD + 30, y, half - 30, 18,
+                    size=12))
+    ws.append(value(f"{ctx.sid}wv", cat(watts), PAD + 30, y + 18, half - 60,
+                    54, size=44, unit="W", color=DIM, vmax=wmax))
+    ws.append(label(f"{ctx.sid}tl", "TEMP", PAD + half + 30, y, half - 30, 18,
+                    size=12))
+    ws.append(value(f"{ctx.sid}tv", cat(temp), PAD + half + 30, y + 18,
+                    half - 60, 54, size=44, unit="°", vmax=100.0,
                     ranges=tranges or RANGES_TEMP))
-    return y + 204
+    return y + 84
 
 
 def s_sys_cpu(ctx, y):
     return s_sys_engine(ctx, y, "CPU", "cpu_util", "cpu_watts", "cpu_temp",
-                        tranges=RANGES_CPU)
+                        mem="ram_pct", memlbl="RAM", tranges=RANGES_CPU)
 
 
 def s_sys_gpu(ctx, y, i=0):
     return s_sys_engine(ctx, y, f"GPU {i}", f"gpu{i}_util", f"gpu{i}_power",
-                        f"gpu{i}_temp", wmax=700.0)
-
-
-def s_sys_mem(ctx, y):
-    PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
-    y = ctx.sect(y, "MEMORY")
-    y += 4
-    rows = (("RAM", "ram_pct", "ram_used"),
-            ("VRAM 0", "gpu0_vram_pct", "gpu0_vram"),
-            ("VRAM 1", "gpu1_vram_pct", "gpu1_vram"))
-    for n, (lbl, pct, absval) in enumerate(rows):
-        ws.append(label(f"{ctx.sid}ml{n}", lbl, PAD, y, 150, 24, size=17,
-                        color=DIM))
-        ws.append(value(f"{ctx.sid}mv{n}", cat(absval), PAD + CW - 150, y - 10,
-                        150, 46, size=38, unit="G", align="right", color=FG,
-                        vmax=1000.0))
-        ws.append(bar(f"{ctx.sid}mb{n}", cat(pct), PAD, y + 34, CW, 22,
-                      ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
-        y += 108
-    return y + 20
+                        f"gpu{i}_temp", mem=f"gpu{i}_vram_pct", memlbl="VRAM",
+                        wmax=700.0)
 
 
 def s_sys_therm(ctx, y):
-    PAD, ws = ctx.PAD, ctx.ws
-    y = ctx.sect(y, "THERMALS")
-    y += 8
-    cells = (("CHASSIS", "case_temp", "°", RANGES_TEMP, None),
-             ("ROOM", "room_temp", "°", None, DIM),
-             ("COOLANT", "coolant", "°", RANGES_TEMP, None),
-             ("FLOW", "flow", " L/h", None, COOL))
-    # flow gets no decimals and a smaller face: "102.0 L/h" at 58pt clipped
-    for n, (lbl, metric, unit, ranges, col) in enumerate(cells):
-        cx = PAD + (n % 2) * 235
-        cy = y + (n // 2) * 186
-        ws.append(label(f"{ctx.sid}hl{n}", lbl, cx, cy, 200, 22, size=14))
-        size = 46 if lbl == "FLOW" else 58
-        fmt = "{:.0}" if lbl == "FLOW" else "{:.1}"
-        ws.append(value(f"{ctx.sid}hv{n}", cat(metric), cx, cy + 24, 220, 74,
-                        size=size, unit=unit, color=col, vmax=400.0, fmt=fmt,
-                        ranges=ranges))
-    return y + 2 * 186 + 6
+    PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
+    half = CW // 2
+    # large coolant, small flow underneath
+    ws.append(label(f"{ctx.sid}cl", "COOLANT", PAD, y, half - 10, 20, size=13))
+    ws.append(value(f"{ctx.sid}cv", cat("coolant"), PAD, y + 22, half - 20, 78,
+                    size=62, unit="°", vmax=60.0, fmt="{:.1}",
+                    ranges=RANGES_TEMP))
+    ws.append(label(f"{ctx.sid}fl", "FLOW", PAD, y + 108, 90, 16, size=11))
+    ws.append(value(f"{ctx.sid}fv", cat("flow"), PAD + 74, y + 102, half - 90,
+                    30, size=24, unit=" L/h", color=COOL, vmax=300.0,
+                    fmt="{:.0}"))
+    # large chassis, small room underneath
+    ws.append(label(f"{ctx.sid}hl", "CHASSIS", PAD + half + 10, y, half - 10,
+                    20, size=13))
+    ws.append(value(f"{ctx.sid}hv", cat("case_temp"), PAD + half + 10, y + 22,
+                    half - 20, 78, size=62, unit="°", vmax=80.0, fmt="{:.1}",
+                    ranges=RANGES_TEMP))
+    ws.append(label(f"{ctx.sid}rl", "ROOM", PAD + half + 10, y + 108, 90, 16,
+                    size=11))
+    ws.append(value(f"{ctx.sid}rv", cat("room_temp"), PAD + half + 84, y + 102,
+                    half - 100, 30, size=24, unit="°", color=DIM, vmax=50.0,
+                    fmt="{:.1}"))
+    return y + 140
 
 
 def s_cq_sys_watts(ctx, y):
@@ -1314,10 +1330,12 @@ PAGES = {
         Sec("header", "Header", s_header),
         Sec("clock", "Clock", s_clock),
         Sec("sys_cpu", "CPU", s_sys_cpu),
+        Sec("sep1", "Separator", s_sys_sep),
         Sec("sys_gpu0", "GPU 0", P(s_sys_gpu, i=0)),
+        Sec("sep2", "Separator", s_sys_sep),
         Sec("sys_gpu1", "GPU 1", P(s_sys_gpu, i=1)),
-        Sec("sys_mem", "Memory allocations", s_sys_mem),
-        Sec("sys_therm", "Thermals + flow", s_sys_therm),
+        Sec("sep3", "Separator", s_sys_sep),
+        Sec("sys_therm", "Thermals", s_sys_therm),
     ],
     "comfy_full.default": [
         Sec("header", "Header", s_header),
