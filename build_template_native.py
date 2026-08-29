@@ -353,25 +353,24 @@ def s_sys_gpu(ctx, y, i=0):
 def s_sys_therm(ctx, y):
     PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
     half = CW // 2
-    # Two centred columns, sized to actually use the bottom of the panel:
-    # readable headings, big degree numbers, and the secondary reading under
-    # each at a size that no longer whispers.
-    cols = ((0, "COOLANT", "coolant", RANGES_TEMP, "FLOW", "flow", " L/h", COOL),
-            (1, "CHASSIS", "case_temp", RANGES_TEMP, "ROOM", "room_temp", "°", DIM))
-    for n, big_lbl, big_m, big_r, sm_lbl, sm_m, sm_u, sm_c in cols:
-        x = PAD + n * half
-        ws.append(label(f"{ctx.sid}bl{n}", big_lbl, x, y, half, 32, size=26,
-                        color=DIM, align="center"))
-        ws.append(value(f"{ctx.sid}bv{n}", cat(big_m), x, y + 32, half, 106,
-                        size=84, unit="°", vmax=400.0, fmt="{:.1}",
-                        align="center", ranges=big_r))
-        ws.append(label(f"{ctx.sid}sl{n}", sm_lbl, x, y + 138, half, 26,
-                        size=20, color=DIM, align="center"))
-        ws.append(value(f"{ctx.sid}sv{n}", cat(sm_m), x, y + 164, half, 58,
-                        size=46, unit=sm_u, color=sm_c, vmax=400.0,
-                        fmt="{:.1}" if sm_u == "°" else "{:.0}",
-                        align="center"))
-    return y + 234
+    # A 2x2 of EQUAL-SIZE numbers: coolant/chassis over flow/room, each with
+    # its heading snug above. Flow's unit lives in the heading — "102 L/h" at
+    # 84pt would not fit a half-column, and mixed value sizes read as a
+    # hierarchy that does not exist.
+    cells = ((0, 0, "COOLANT", "coolant", "°", RANGES_TEMP, None, "{:.1}"),
+             (1, 0, "CHASSIS", "case_temp", "°", RANGES_TEMP, None, "{:.1}"),
+             (0, 1, "FLOW L/H", "flow", "", None, COOL, "{:.0}"),
+             (1, 1, "ROOM", "room_temp", "°", None, DIM, "{:.1}"))
+    ROW = 148
+    for cx_i, cy_i, lbl, metric, unit, ranges, col, fmt in cells:
+        x = PAD + cx_i * half
+        cy = y + cy_i * ROW
+        ws.append(label(f"{ctx.sid}l{cx_i}{cy_i}", lbl, x, cy, half, 30,
+                        size=24, color=DIM, align="center"))
+        ws.append(value(f"{ctx.sid}v{cx_i}{cy_i}", cat(metric), x, cy + 30,
+                        half, 106, size=84, unit=unit, vmax=400.0, fmt=fmt,
+                        align="center", color=col, ranges=ranges))
+    return y + 2 * ROW + 10
 
 
 def s_cq_sys_watts(ctx, y):
