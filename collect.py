@@ -241,6 +241,14 @@ def main() -> None:
                 write(f"gpu{i}_vram", f"{g['vram']:.1f}")
                 write(f"gpu{i}_vram_pct", f"{g['vram'] / g['vram_total'] * 100:.0f}")
                 write(f"gpu{i}_power", f"{g['power']:.0f}")
+            # combined-GPU rollups for the llama page: average utilisation (both
+            # cards share a split model, so avg tracks the workload), summed
+            # watts, hottest temp
+            gs = m.gpus[:2]
+            if gs:
+                write("gpus_util", f"{sum(g['util'] for g in gs) / len(gs):.0f}")
+                write("gpus_power", f"{sum(g['power'] for g in gs):.0f}")
+                write("gpus_temp", f"{max(g['temp'] for g in gs):.0f}")
             write_wirewatch()
             write("cpu_util", f"{m.cpu_pct:.0f}")
             write("cpu_temp", f"{m.cpu_temp:.0f}" if m.cpu_temp else "0")

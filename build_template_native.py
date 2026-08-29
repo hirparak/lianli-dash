@@ -397,6 +397,102 @@ def s_cq_sys_therm(ctx, y):
     return y + 62
 
 
+# ── llama page v2 (2026-08-29): no sparklines, inference is the star ─────────
+# Two compact engine blocks in the system-card language (big number between
+# flanking bars, name beneath, watts/temp at the bar feet), then the rest of
+# the panel is inference: huge tok/s, the loaded models by name, and a 2x2
+# metrics grid anchored to the bottom.
+
+def s_lf2_block(ctx, y, barh, number, name, lbar, rbar, lcap, rcap,
+                watts, temp, wmax, tranges=None):
+    PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
+    BARW = 44
+    ws.append(vbar(f"{ctx.sid}bl", cat(lbar), PAD, y, BARW, barh,
+                   ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
+    ws.append(vbar(f"{ctx.sid}br", cat(rbar), PAD + CW - BARW, y, BARW, barh,
+                   ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
+    ws.append(label(f"{ctx.sid}bll", lcap, PAD - 4, y + barh + 4, BARW + 8, 18,
+                    size=11, align="center"))
+    ws.append(label(f"{ctx.sid}brl", rcap, PAD + CW - BARW - 4, y + barh + 4,
+                    BARW + 8, 18, size=11, align="center"))
+    ix, iw = PAD + BARW + 8, CW - 2 * BARW - 16
+    ws.append(value(f"{ctx.sid}u", cat(number), ix, y + 22, iw, 130, size=92,
+                    unit="%", color=FG, align="center", vmax=100.0,
+                    ranges=RANGES_LOAD))
+    ws.append(label(f"{ctx.sid}t", name, ix, y + 156, iw, 32, size=26,
+                    color=DIM, align="center"))
+    half = iw // 2
+    ws.append(label(f"{ctx.sid}wl", "WATTS", ix, y + barh - 84, half, 18,
+                    size=12, align="center"))
+    ws.append(value(f"{ctx.sid}wv", cat(watts), ix, y + barh - 66, half, 50,
+                    size=40, unit="W", color=DIM, vmax=wmax, align="center"))
+    ws.append(label(f"{ctx.sid}tl", "TEMP", ix + half, y + barh - 84, half, 18,
+                    size=12, align="center"))
+    ws.append(value(f"{ctx.sid}tv", cat(temp), ix + half, y + barh - 66, half,
+                    50, size=40, unit="°", vmax=100.0, align="center",
+                    ranges=tranges or RANGES_TEMP))
+    return y + barh + 26
+
+
+def s_lf2_gpu(ctx, y):
+    return s_lf2_block(ctx, y, 310, "gpus_util", "GPU ×2",
+                       "gpu0_vram_pct", "gpu1_vram_pct", "VRAM0", "VRAM1",
+                       "gpus_power", "gpus_temp", 1400.0)
+
+
+def s_lf2_cpu(ctx, y):
+    return s_lf2_block(ctx, y, 310, "cpu_util", "CPU",
+                       "ram_pct", "ram_pct", "RAM", "RAM",
+                       "cpu_watts", "cpu_temp", 500.0, tranges=RANGES_CPU)
+
+
+def s_lf2_infer(ctx, y):
+    """The star of the page: tok/s huge, the loaded models by name, and a 2x2
+    metrics grid. Vertical gaps are computed from the remaining panel height so
+    the grid lands at the bottom edge — no dead space (the system page lesson,
+    measured at 278px there, applied from the start here)."""
+    PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
+    ROW = 168
+    TPS_H, CAP_H, SLOT_H = 240, 40, 60
+    fixed = TPS_H + CAP_H + 2 * SLOT_H + 2 * ROW
+    gap = max(24, (1908 - y - fixed) // 2)   # two internal gaps; grid lands flush
+    # headline decode rate with liveness lamp
+    ws.append(value(f"{ctx.sid}tps", cat("llm_tps"), PAD, y, CW, TPS_H,
+                    size=150, color=RED, align="center", vmax=1000.0))
+    ws.append(label(f"{ctx.sid}tl", "TOK / S", PAD, y + TPS_H + 4, CW - 60, 32,
+                    size=26, color=DIM, align="center"))
+    ws.append(bar(f"{ctx.sid}lamp", cat("llm_live"), PAD + CW - 48,
+                  y + TPS_H + 12, 30, 12, vmax=2.0, ranges=LAMP))
+    y += TPS_H + CAP_H + gap
+    # loaded models: baked names (value_text is numeric-only), per-slot rate
+    for i in range(2):
+        nm = (ctx.slot_names[i] if i < len(ctx.slot_names) else "—") or "—"
+        ws.append(label(f"{ctx.sid}m{i}", nm[:24], PAD, y + 12, CW - 150, 32,
+                        size=20, color=FG))
+        ws.append(value(f"{ctx.sid}mt{i}", cat(f"llm{i}_tps"), PAD + CW - 148,
+                        y + 4, 108, 44, size=32, color=DIM, align="right",
+                        vmax=1000.0))
+        ws.append(bar(f"{ctx.sid}mlp{i}", cat(f"llm{i}_live"), PAD + CW - 30,
+                      y + 18, 22, 10, vmax=2.0, ranges=LAMP))
+        y += SLOT_H
+    y += gap
+    # 2x2 metrics grid, equal weights (the thermal-grid pattern)
+    half = CW // 2
+    cells = ((0, 0, "PREFILL T/S", "llm_prefill", "{:.0}", None),
+             (1, 0, "ACCEPT", "llm_accept", "{:.0}", "%"),
+             (0, 1, "CTX K", "llm_ctx", "{:.0}", None),
+             (1, 1, "TOK / W", "llm_tokw", "{:.1}", None))
+    for cx_i, cy_i, lbl, metric, fmt, unit in cells:
+        x = PAD + cx_i * half
+        cy = y + cy_i * ROW
+        ws.append(label(f"{ctx.sid}g{cx_i}{cy_i}", lbl, x, cy, half, 30,
+                        size=22, color=DIM, align="center"))
+        ws.append(value(f"{ctx.sid}gv{cx_i}{cy_i}", cat(metric), x, cy + 34,
+                        half, 110, size=80, unit=unit or "", vmax=100000.0,
+                        fmt=fmt, align="center", color=FG))
+    return y + 2 * ROW
+
+
 # ═══════════════════════════════ SECTION REGISTRY ════════════════════════════════
 # Every portrait page is an ordered list of sections. Contract:
 #   fn(ctx, y) -> next_y        draws widgets into ctx.ws starting at y
@@ -1349,16 +1445,16 @@ PAGES = {
         Sec("gpu0", "GPU 0", P(s_gpu, i=0, spark_h=360)),
         Sec("cf_system", "System stats", s_cf_system),
     ],
+    # Llama v2 (2026-08-29): no sparklines. Combined GPU + CPU blocks in the
+    # system-card language, then inference owns the rest of the panel.
     "llama_full.default": [
         Sec("header", "Header", s_header),
         Sec("clock", "Clock", s_clock),
-        Sec("lf_slots", "Model slots", s_lf_slots),
-        Sec("lf_spark", "Decode history", s_lf_spark, flex=True, min_h=150),
-        Sec("lf_inference", "Inference detail", s_lf_inference),
-        Sec("lf_depth", "Spec depth", s_lf_depth),
-        Sec("gpu0", "GPU 0", P(s_gpu, i=0, spark_h=150)),
-        Sec("gpu1", "GPU 1", P(s_gpu, i=1, spark_h=150)),
-        Sec("lf_system", "System stats", s_lf_system),
+        Sec("lf2_gpu", "GPU combined", s_lf2_gpu),
+        Sec("sepA", "Separator", s_sys_sep),
+        Sec("lf2_cpu", "CPU + sysmem", s_lf2_cpu),
+        Sec("sepB", "Separator", s_sys_sep),
+        Sec("lf2_infer", "Inference", s_lf2_infer),
     ],
     # Simplified dial cluster: three big activity dials, memory as bars, then
     # temperatures and pump. The combined page adds a compact inference readout
