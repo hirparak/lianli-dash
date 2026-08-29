@@ -320,7 +320,7 @@ def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
     ws.append(value(f"{ctx.sid}u", cat(util), PAD + BARW + 8, y + 52,
                     CW - 2 * BARW - 16, 150, size=104, unit="%", color=FG,
                     align="center", vmax=100.0, ranges=RANGES_LOAD))
-    ws.append(label(f"{ctx.sid}t", title, PAD + BARW + 8, y + 206,
+    ws.append(label(f"{ctx.sid}t", title, PAD + BARW + 8, y + 188,
                     CW - 2 * BARW - 16, 34, size=28, color=DIM,
                     align="center"))
     y += BARH + 14
@@ -353,23 +353,25 @@ def s_sys_gpu(ctx, y, i=0):
 def s_sys_therm(ctx, y):
     PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
     half = CW // 2
-    # Two centred columns: everything shares its column's centre axis.
+    # Two centred columns, sized to actually use the bottom of the panel:
+    # readable headings, big degree numbers, and the secondary reading under
+    # each at a size that no longer whispers.
     cols = ((0, "COOLANT", "coolant", RANGES_TEMP, "FLOW", "flow", " L/h", COOL),
             (1, "CHASSIS", "case_temp", RANGES_TEMP, "ROOM", "room_temp", "°", DIM))
     for n, big_lbl, big_m, big_r, sm_lbl, sm_m, sm_u, sm_c in cols:
         x = PAD + n * half
-        ws.append(label(f"{ctx.sid}bl{n}", big_lbl, x, y, half, 22, size=14,
-                        align="center"))
-        ws.append(value(f"{ctx.sid}bv{n}", cat(big_m), x, y + 24, half, 96,
-                        size=76, unit="°", vmax=400.0, fmt="{:.1}",
+        ws.append(label(f"{ctx.sid}bl{n}", big_lbl, x, y, half, 32, size=26,
+                        color=DIM, align="center"))
+        ws.append(value(f"{ctx.sid}bv{n}", cat(big_m), x, y + 32, half, 106,
+                        size=84, unit="°", vmax=400.0, fmt="{:.1}",
                         align="center", ranges=big_r))
-        ws.append(label(f"{ctx.sid}sl{n}", sm_lbl, x, y + 130, half, 18,
-                        size=12, align="center"))
-        ws.append(value(f"{ctx.sid}sv{n}", cat(sm_m), x, y + 150, half, 44,
-                        size=36, unit=sm_u, color=sm_c, vmax=400.0,
+        ws.append(label(f"{ctx.sid}sl{n}", sm_lbl, x, y + 138, half, 26,
+                        size=20, color=DIM, align="center"))
+        ws.append(value(f"{ctx.sid}sv{n}", cat(sm_m), x, y + 164, half, 58,
+                        size=46, unit=sm_u, color=sm_c, vmax=400.0,
                         fmt="{:.1}" if sm_u == "°" else "{:.0}",
                         align="center"))
-    return y + 204
+    return y + 234
 
 
 def s_cq_sys_watts(ctx, y):
