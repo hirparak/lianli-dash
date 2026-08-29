@@ -321,16 +321,17 @@ def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
                     CW - 2 * BARW - 16, 150, size=104, unit="%", color=FG,
                     align="center", vmax=100.0, ranges=RANGES_LOAD))
     y += BARH + 28
-    # watts + temp, horizontal beneath
+    # watts + temp beneath: label and value each CENTRED on its half-column
+    # axis, so the pair sits symmetrically under the centred headline number.
     half = CW // 2
-    ws.append(label(f"{ctx.sid}wl", "WATTS", PAD + 30, y, half - 30, 18,
-                    size=12))
-    ws.append(value(f"{ctx.sid}wv", cat(watts), PAD + 30, y + 18, half - 60,
-                    54, size=44, unit="W", color=DIM, vmax=wmax))
-    ws.append(label(f"{ctx.sid}tl", "TEMP", PAD + half + 30, y, half - 30, 18,
-                    size=12))
-    ws.append(value(f"{ctx.sid}tv", cat(temp), PAD + half + 30, y + 18,
-                    half - 60, 54, size=44, unit="°", vmax=100.0,
+    ws.append(label(f"{ctx.sid}wl", "WATTS", PAD, y, half, 18, size=12,
+                    align="center"))
+    ws.append(value(f"{ctx.sid}wv", cat(watts), PAD, y + 18, half, 54,
+                    size=44, unit="W", color=DIM, vmax=wmax, align="center"))
+    ws.append(label(f"{ctx.sid}tl", "TEMP", PAD + half, y, half, 18, size=12,
+                    align="center"))
+    ws.append(value(f"{ctx.sid}tv", cat(temp), PAD + half, y + 18, half, 54,
+                    size=44, unit="°", vmax=100.0, align="center",
                     ranges=tranges or RANGES_TEMP))
     return y + 84
 
@@ -349,27 +350,23 @@ def s_sys_gpu(ctx, y, i=0):
 def s_sys_therm(ctx, y):
     PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
     half = CW // 2
-    # large coolant, small flow underneath
-    ws.append(label(f"{ctx.sid}cl", "COOLANT", PAD, y, half - 10, 20, size=13))
-    ws.append(value(f"{ctx.sid}cv", cat("coolant"), PAD, y + 22, half - 20, 78,
-                    size=62, unit="°", vmax=60.0, fmt="{:.1}",
-                    ranges=RANGES_TEMP))
-    ws.append(label(f"{ctx.sid}fl", "FLOW", PAD, y + 108, 90, 16, size=11))
-    ws.append(value(f"{ctx.sid}fv", cat("flow"), PAD + 74, y + 102, half - 90,
-                    30, size=24, unit=" L/h", color=COOL, vmax=300.0,
-                    fmt="{:.0}"))
-    # large chassis, small room underneath
-    ws.append(label(f"{ctx.sid}hl", "CHASSIS", PAD + half + 10, y, half - 10,
-                    20, size=13))
-    ws.append(value(f"{ctx.sid}hv", cat("case_temp"), PAD + half + 10, y + 22,
-                    half - 20, 78, size=62, unit="°", vmax=80.0, fmt="{:.1}",
-                    ranges=RANGES_TEMP))
-    ws.append(label(f"{ctx.sid}rl", "ROOM", PAD + half + 10, y + 108, 90, 16,
-                    size=11))
-    ws.append(value(f"{ctx.sid}rv", cat("room_temp"), PAD + half + 84, y + 102,
-                    half - 100, 30, size=24, unit="°", color=DIM, vmax=50.0,
-                    fmt="{:.1}"))
-    return y + 140
+    # Two centred columns: everything shares its column's centre axis.
+    cols = ((0, "COOLANT", "coolant", RANGES_TEMP, "FLOW", "flow", " L/h", COOL),
+            (1, "CHASSIS", "case_temp", RANGES_TEMP, "ROOM", "room_temp", "°", DIM))
+    for n, big_lbl, big_m, big_r, sm_lbl, sm_m, sm_u, sm_c in cols:
+        x = PAD + n * half
+        ws.append(label(f"{ctx.sid}bl{n}", big_lbl, x, y, half, 22, size=14,
+                        align="center"))
+        ws.append(value(f"{ctx.sid}bv{n}", cat(big_m), x, y + 24, half, 96,
+                        size=76, unit="°", vmax=400.0, fmt="{:.1}",
+                        align="center", ranges=big_r))
+        ws.append(label(f"{ctx.sid}sl{n}", sm_lbl, x, y + 130, half, 18,
+                        size=12, align="center"))
+        ws.append(value(f"{ctx.sid}sv{n}", cat(sm_m), x, y + 150, half, 44,
+                        size=36, unit=sm_u, color=sm_c, vmax=400.0,
+                        fmt="{:.1}" if sm_u == "°" else "{:.0}",
+                        align="center"))
+    return y + 204
 
 
 def s_cq_sys_watts(ctx, y):
