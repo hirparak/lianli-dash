@@ -454,8 +454,8 @@ def s_lf2_infer(ctx, y):
     PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
     half = CW // 2
     ROW = 168
-    HEAD_H, SLOT_H = 200, 72
-    fixed = HEAD_H + 2 * SLOT_H + 2 * ROW
+    HEAD_H, SLOT_H, DEPTH_H = 200, 72, 104
+    fixed = HEAD_H + 2 * SLOT_H + 2 * ROW + DEPTH_H
     gap = max(24, (1908 - y - fixed) // 2)
     # headline pair: decode + prefill, headings above
     for n, (lbl, metric, col) in enumerate((("TOK / S", "llm_tps", RED),
@@ -498,7 +498,18 @@ def s_lf2_infer(ctx, y):
         ws.append(value(f"{ctx.sid}gv{cx_i}{cy_i}", cat(metric), x, cy + 34,
                         half, 110, size=80, unit=unit or "", vmax=1000000.0,
                         fmt=fmt, align="center", color=FG))
-    return y + 2 * ROW
+    y += 2 * ROW + 16
+    # Spec-decode acceptance by draft position -- the detail behind ACCEPT:
+    # whether deeper drafts are still earning their keep.
+    third = CW // 3
+    for i in range(3):
+        x = PAD + i * third
+        ws.append(label(f"{ctx.sid}dl{i}", f"D{i + 1}", x, y, third, 26,
+                        size=20, color=DIM, align="center"))
+        ws.append(value(f"{ctx.sid}dv{i}", cat(f"llm_depth{i}"), x, y + 26,
+                        third, 60, size=44, unit="%", color=FG,
+                        align="center", vmax=100.0, fmt="{:.0}"))
+    return y + DEPTH_H - 16
 
 
 # ═══════════════════════════════ SECTION REGISTRY ════════════════════════════════
