@@ -303,9 +303,13 @@ def s_sys_sep(ctx, y):
 def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
                  temp="cpu_temp", mem="ram_pct", memlbl="RAM", wmax=500.0,
                  tranges=None):
+    """One engine block, everything BETWEEN the two flanking memory bars:
+    the headline percentage, the engine's name beneath it, and the watts/temp
+    pair at the bottom of the region. Bar height is sized so three blocks plus
+    separators land the thermal grid flush with the bottom of the panel
+    (measured: the old layout left 278px dead below the thermals)."""
     PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
-    BARW, BARH = 44, 300
-    # flanking memory bars, one each side of the big number
+    BARW, BARH = 44, 452
     ws.append(vbar(f"{ctx.sid}bl", cat(mem), PAD, y, BARW, BARH,
                    ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
     ws.append(vbar(f"{ctx.sid}br", cat(mem), PAD + CW - BARW, y, BARW, BARH,
@@ -314,29 +318,25 @@ def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
                     18, size=11, align="center"))
     ws.append(label(f"{ctx.sid}brl", memlbl, PAD + CW - BARW - 4, y + BARH + 4,
                     BARW + 8, 18, size=11, align="center"))
-    # the big number, centred between the bars, with the engine's name tucked
-    # DIRECTLY beneath it (inside the bar region) — with a gap it reads as a
-    # header for the watts/temp row below instead of a caption of its number
-    ws.append(value(f"{ctx.sid}u", cat(util), PAD + BARW + 8, y + 52,
-                    CW - 2 * BARW - 16, 150, size=104, unit="%", color=FG,
-                    align="center", vmax=100.0, ranges=RANGES_LOAD))
-    ws.append(label(f"{ctx.sid}t", title, PAD + BARW + 8, y + 188,
-                    CW - 2 * BARW - 16, 34, size=28, color=DIM,
-                    align="center"))
-    y += BARH + 14
-    # watts + temp beneath: label and value each CENTRED on its half-column
-    # axis, so the pair sits symmetrically under the centred headline number.
-    half = CW // 2
-    ws.append(label(f"{ctx.sid}wl", "WATTS", PAD, y, half, 18, size=12,
-                    align="center"))
-    ws.append(value(f"{ctx.sid}wv", cat(watts), PAD, y + 18, half, 54,
+    ix, iw = PAD + BARW + 8, CW - 2 * BARW - 16
+    # headline number with its name snug beneath
+    ws.append(value(f"{ctx.sid}u", cat(util), ix, y + 70, iw, 150, size=104,
+                    unit="%", color=FG, align="center", vmax=100.0,
+                    ranges=RANGES_LOAD))
+    ws.append(label(f"{ctx.sid}t", title, ix, y + 226, iw, 34, size=28,
+                    color=DIM, align="center"))
+    # watts + temp at the bottom of the region, centred on half-column axes
+    half = iw // 2
+    ws.append(label(f"{ctx.sid}wl", "WATTS", ix, y + BARH - 96, half, 18,
+                    size=12, align="center"))
+    ws.append(value(f"{ctx.sid}wv", cat(watts), ix, y + BARH - 76, half, 54,
                     size=44, unit="W", color=DIM, vmax=wmax, align="center"))
-    ws.append(label(f"{ctx.sid}tl", "TEMP", PAD + half, y, half, 18, size=12,
-                    align="center"))
-    ws.append(value(f"{ctx.sid}tv", cat(temp), PAD + half, y + 18, half, 54,
-                    size=44, unit="°", vmax=100.0, align="center",
+    ws.append(label(f"{ctx.sid}tl", "TEMP", ix + half, y + BARH - 96, half, 18,
+                    size=12, align="center"))
+    ws.append(value(f"{ctx.sid}tv", cat(temp), ix + half, y + BARH - 76, half,
+                    54, size=44, unit="°", vmax=100.0, align="center",
                     ranges=tranges or RANGES_TEMP))
-    return y + 84
+    return y + BARH + 26
 
 
 def s_sys_cpu(ctx, y):
