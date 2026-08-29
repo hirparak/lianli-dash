@@ -19,7 +19,7 @@ import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
-from gi.repository import Gtk, AyatanaAppIndicator3 as AppIndicator
+from gi.repository import GLib, Gtk, AyatanaAppIndicator3 as AppIndicator
 
 CONFIG_FILE = os.path.expanduser("~/.config/lianli-dash/config.json")
 TYPES = [
@@ -107,6 +107,26 @@ def main():
     ind.set_status(AppIndicator.IndicatorStatus.ACTIVE)
     ind.set_title("Lian Li dashboard")
     ind.set_menu(build_menu())
+
+    # The menu radios show the config AS OF BUILD TIME, and the theme/type are
+    # also changed by the settings app, by collect-side tooling and by scripts —
+    # a menu built once at startup ends up ticking the wrong item (or seemingly
+    # none). Rebuild whenever config.json's mtime moves; 2s poll is plenty for
+    # a menu no one is looking at continuously.
+    state = {"mtime": None}
+
+    def refresh():
+        try:
+            mtime = os.stat(CONFIG_FILE).st_mtime
+        except OSError:
+            return True
+        if mtime != state["mtime"]:
+            state["mtime"] = mtime
+            ind.set_menu(build_menu())
+        return True
+
+    refresh()
+    GLib.timeout_add_seconds(2, refresh)
     Gtk.main()
 
 
