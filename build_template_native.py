@@ -304,8 +304,6 @@ def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
                  temp="cpu_temp", mem="ram_pct", memlbl="RAM", wmax=500.0,
                  tranges=None):
     PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
-    ws.append(label(f"{ctx.sid}t", title, PAD, y, 200, 26, size=17, color=DIM))
-    y += 30
     BARW, BARH = 44, 300
     # flanking memory bars, one each side of the big number
     ws.append(vbar(f"{ctx.sid}bl", cat(mem), PAD, y, BARW, BARH,
@@ -320,7 +318,12 @@ def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
     ws.append(value(f"{ctx.sid}u", cat(util), PAD + BARW + 8, y + 66,
                     CW - 2 * BARW - 16, 150, size=104, unit="%", color=FG,
                     align="center", vmax=100.0, ranges=RANGES_LOAD))
-    y += BARH + 28
+    y += BARH + 6
+    # the engine's name, centred directly under its number — big enough to read
+    # at a glance but in the muted theme colour so it doesn't fight the values
+    ws.append(label(f"{ctx.sid}t", title, PAD, y, CW, 34, size=28, color=DIM,
+                    align="center"))
+    y += 44
     # watts + temp beneath: label and value each CENTRED on its half-column
     # axis, so the pair sits symmetrically under the centred headline number.
     half = CW // 2
