@@ -68,12 +68,23 @@ THEME_STYLE = {
                  BARBG=[10, 32, 28, 255]),
 }
 
+# Fire mode: when `hot` the WHOLE palette ignites with the background — bars,
+# accents and range tables go ember instead of staying in theme colours (a cyan
+# gits bar over flames read as two different events). Same colour roles as the
+# WireView FIRE palette so every screen in the case burns in the same hues.
+# HOT stays a distinct deep red so genuinely-hot readings still stand out.
+FIRE_STYLE = dict(FG=[255, 235, 215, 255], DIM=[170, 100, 60, 255],
+                  COOL=[255, 150, 60, 255], GOOD=[255, 180, 80, 255],
+                  WARN=[255, 120, 30, 255], HOT=[255, 55, 30, 255],
+                  NEEDLE=[255, 80, 30, 255], FACE=[26, 12, 6, 225],
+                  BARBG=[45, 22, 12, 255])
+
 # config.json theme_colors keys -> palette slots (the settings app's colour pickers)
 USER_COLOR_SLOTS = (("accent", "NEEDLE"), ("good", "GOOD"),
                     ("warn", "WARN"), ("hot", "HOT"))
 
 
-def _apply_theme(theme, user=None):
+def _apply_theme(theme, user=None, hot=False):
     """Set the palette globals for `theme`, with optional per-theme user colour
     overrides (from config.json `theme_colors`) layered on top. The derived
     range/lamp tables are rebuilt from the merged values."""
@@ -85,6 +96,8 @@ def _apply_theme(theme, user=None):
         if (isinstance(v, list) and len(v) == 4
                 and all(isinstance(c, int) and 0 <= c <= 255 for c in v)):
             p[dst] = v
+    if hot:
+        p = {**p, **FIRE_STYLE}           # fire outranks theme AND user colours
     FG, DIM, COOL, GOOD = p["FG"], p["DIM"], p["COOL"], p["GOOD"]
     WARN, HOT, RED, CARBON, BARBG = (p["WARN"], p["HOT"], p["NEEDLE"],
                                      p["FACE"], p["BARBG"])
@@ -1824,7 +1837,7 @@ def build(slot_names=None, mode="llama", comfy_job=None, theme="default",
     global W, H
     W, H = (1920, 480) if orient.startswith("landscape") else (480, 1920)
     ucfg = _user_cfg()
-    _apply_theme(theme, (ucfg.get("theme_colors") or {}).get(theme))
+    _apply_theme(theme, (ucfg.get("theme_colors") or {}).get(theme), hot=hot)
     bg_op = float(ucfg.get("bg_opacity", BG_VIDEO_OPACITY))
     bg_fps = float(ucfg.get("bg_fps", BG_VIDEO_FPS))
     ws = []
