@@ -45,6 +45,7 @@ def _octo_a_path():
     return None
 
 _OCTO_A = _octo_a_path()
+import ringbar
 from build_template_native import build as build_tpl, bg_video_key, bg_path, _user_cfg
 import paths
 
@@ -118,62 +119,47 @@ def write(name: str, value) -> None:
 # language as the case: dim white idle, orange stepping brighter with GPU
 # load, red on the coolant alarm. Load signal = GPU 0 (the non-display card),
 # matching coolerlink's status rain.
-_ring_id = None
-_ring_state = None
+_ring_client = None     # persistent OpenRGB connection to the daemon
+_ring_state = None      # ("alarm",) or (fill_steps, hot) — last frame sent
 _ring_sent_at = 0.0
-_ring_util = 0.0
-
-
-def _ring_device():
-    """Discover the ring's device_id — the USB bus path in it changes across
-    replugs/reboots, so never hardcode it."""
-    global _ring_id
-    if _ring_id:
-        return _ring_id
-    try:
-        caps = dash._ipc({"method": "GetRgbCapabilities"})
-        for d in caps.get("data") or []:
-            if "LED Ring" in (d.get("device_name") or ""):
-                _ring_id = d["device_id"]
-                break
-    except Exception:
-        pass
-    return _ring_id
 
 
 def update_ring(m, hot=False) -> None:
-    global _ring_state, _ring_sent_at, _ring_util, _ring_id
-    g0 = next((g for g in m.gpus if g["idx"] == 0), None)
-    _ring_util = 0.6 * _ring_util + 0.4 * (g0["util"] if g0 else 0)  # ~3-tick EMA
-    if (m.coolant is not None and m.coolant >= 50) or _ww_worst >= 2:
-        state = ([255, 0, 0], 4)          # alarm: red, full — coolant or a 12V-2x6 crit
-    elif _ring_util >= 75:
-        state = ([255, 60, 0], 4)         # flat out: hot orange, full
-    elif _ring_util >= 45:
-        state = ([255, 90, 0], 3)         # working: orange
-    elif _ring_util >= 20 or hot:
-        # `hot` is the SAME flag that keeps the panel's fire background up
-        # (45s hold past the last busy tick). Without it the ring's fast EMA
-        # decays to white seconds before the panel calms — the lighting and
-        # the dash told different stories at every job end.
-        state = ([255, 120, 0], 2)        # light load / fire hold: soft orange
-    else:
-        state = ([255, 255, 255], 1)      # idle: dim white accent
+    """The ring is a vertical VRAM gauge: both long edges fill bottom->up with
+    combined VRAM (used/total over both GPUs), white when calm, red while the
+    rig is hot (same flag as the fire background), full-ring red on an alarm.
+
+    Per-LED frames go over the daemon's OpenRGB server (the SetRgbEffect IPC
+    flattens to one colour). State is quantised to the 24-LED edge resolution
+    so a frame is only sent when something visibly changes, plus the usual
+    5-min re-assert; write failures drop the connection and retry next tick.
+    """
+    global _ring_state, _ring_sent_at, _ring_client
+    used = sum(g.get("vram") or 0 for g in m.gpus)
+    total = sum(g.get("vram_total") or 0 for g in m.gpus)
+    fill = (used / total) if total else 0.0
+    alarm = (m.coolant is not None and m.coolant >= 50) or _ww_worst >= 2
+    steps = round(max(0.0, min(1.0, fill)) * ringbar.EDGE)
+    state = ("alarm",) if alarm else (steps, bool(hot))
     now = time.time()
-    # Write only on change; refresh every 5 min anyway so a daemon restart
-    # (which forgets the ring) can't leave it stale for long.
     if state == _ring_state and now - _ring_sent_at < 300:
         return
-    dev = _ring_device()
-    if not dev:
-        return
     try:
-        dash._ipc({"method": "SetRgbEffect", "params": {
-            "device_id": dev, "zone": 0,
-            "effect": {"mode": "Static", "colors": [state[0]], "brightness": state[1]}}})
+        if _ring_client is None:
+            _ring_client = ringbar.RingClient()
+        if alarm:
+            frame = ringbar.full_frame((255, 0, 0))
+        else:
+            colour = (255, 30, 10) if hot else (180, 180, 180)
+            frame = ringbar.bar_frame(fill, colour)
+        _ring_client.update(frame)
         _ring_state, _ring_sent_at = state, now
     except Exception as e:
-        _ring_id = None  # bus path may have changed — re-discover next tick
+        try:
+            _ring_client.close()
+        except Exception:
+            pass
+        _ring_client = None   # server may be restarting — reconnect next tick
         print("ring:", e, flush=True)
 
 
