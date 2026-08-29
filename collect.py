@@ -136,7 +136,7 @@ def _ring_device():
     return _ring_id
 
 
-def update_ring(m) -> None:
+def update_ring(m, hot=False) -> None:
     global _ring_state, _ring_sent_at, _ring_util, _ring_id
     g0 = next((g for g in m.gpus if g["idx"] == 0), None)
     _ring_util = 0.6 * _ring_util + 0.4 * (g0["util"] if g0 else 0)  # ~3-tick EMA
@@ -146,8 +146,12 @@ def update_ring(m) -> None:
         state = ([255, 60, 0], 4)         # flat out: hot orange, full
     elif _ring_util >= 45:
         state = ([255, 90, 0], 3)         # working: orange
-    elif _ring_util >= 20:
-        state = ([255, 120, 0], 2)        # light load: soft orange
+    elif _ring_util >= 20 or hot:
+        # `hot` is the SAME flag that keeps the panel's fire background up
+        # (45s hold past the last busy tick). Without it the ring's fast EMA
+        # decays to white seconds before the panel calms — the lighting and
+        # the dash told different stories at every job end.
+        state = ([255, 120, 0], 2)        # light load / fire hold: soft orange
     else:
         state = ([255, 255, 255], 1)      # idle: dim white accent
     now = time.time()
@@ -324,6 +328,9 @@ def main() -> None:
             if generating or comfy_running:
                 _hot_at = now
             hot = (now - _hot_at) < HOT_HOLD
+            # Published for other rig consumers (wirewatch themes the WireView
+            # displays fire/calm off this) so nobody re-derives the hold logic.
+            write("hot", "1" if hot else "0")
 
             # Baked-label strings are template content (image widgets can't update,
             # value_text can't do strings), so a change of mode, model set, or comfy
@@ -408,7 +415,7 @@ def main() -> None:
             # tokens per watt — what the 300W cap actually costs on a given model
             gw = sum(g["power"] for g in m.gpus) or 1
             write("llm_tokw", f"{((rate or _last_rate) / gw):.2f}")
-            update_ring(m)
+            update_ring(m, hot)
             # Render the full dashboard with the PIL layout — the one confirmed to display
             # correctly oriented and full-size on the panel — into a fixed path. The template
             # shows it through a single image widget, so the daemon's autonomous renderer picks
