@@ -314,16 +314,16 @@ def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
                     18, size=11, align="center"))
     ws.append(label(f"{ctx.sid}brl", memlbl, PAD + CW - BARW - 4, y + BARH + 4,
                     BARW + 8, 18, size=11, align="center"))
-    # the big number, centred between the bars
-    ws.append(value(f"{ctx.sid}u", cat(util), PAD + BARW + 8, y + 66,
+    # the big number, centred between the bars, with the engine's name tucked
+    # DIRECTLY beneath it (inside the bar region) — with a gap it reads as a
+    # header for the watts/temp row below instead of a caption of its number
+    ws.append(value(f"{ctx.sid}u", cat(util), PAD + BARW + 8, y + 52,
                     CW - 2 * BARW - 16, 150, size=104, unit="%", color=FG,
                     align="center", vmax=100.0, ranges=RANGES_LOAD))
-    y += BARH + 6
-    # the engine's name, centred directly under its number — big enough to read
-    # at a glance but in the muted theme colour so it doesn't fight the values
-    ws.append(label(f"{ctx.sid}t", title, PAD, y, CW, 34, size=28, color=DIM,
+    ws.append(label(f"{ctx.sid}t", title, PAD + BARW + 8, y + 206,
+                    CW - 2 * BARW - 16, 34, size=28, color=DIM,
                     align="center"))
-    y += 44
+    y += BARH + 14
     # watts + temp beneath: label and value each CENTRED on its half-column
     # axis, so the pair sits symmetrically under the centred headline number.
     half = CW // 2
