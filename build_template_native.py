@@ -466,6 +466,13 @@ def s_lf2_infer(ctx, y):
         ws.append(value(f"{ctx.sid}hv{n}", cat(metric), x, y + 36, half, 150,
                         size=104, color=col, align="center", vmax=100000.0,
                         fmt="{:.0}"))
+    # Liveness indicator, in the one logical place: an activity underline
+    # beneath the TOK/S number. llm_live is 2 generating / 1 recent / 0 stale,
+    # so it reads full-accent, half-dim, empty — no reinstall plumbing needed.
+    ws.append(bar(f"{ctx.sid}live", cat("llm_live"),
+                  PAD + (half - 140) // 2, y + HEAD_H - 16, 140, 8, vmax=2.0,
+                  ranges=[{"max": 1.5, "color": DIM[:3], "alpha": 200},
+                          {"max": None, "color": RED[:3], "alpha": 245}]))
     y += HEAD_H + gap
     # loaded models: big names (baked — value_text is numeric-only), each with
     # its own decode rate labelled in t/s
