@@ -45,6 +45,33 @@ def _octo_a_path():
     return None
 
 _OCTO_A = _octo_a_path()
+
+# CPU package watts from RAPL energy counters (root-readable only, which the
+# collector is). Watts = delta(energy_uj)/delta(t); the counter wraps at
+# max_energy_range_uj, handled below.
+_RAPL = "/sys/class/powercap/intel-rapl:0/energy_uj"
+_rapl_last = None            # (energy_uj, monotonic)
+
+
+def cpu_watts():
+    global _rapl_last
+    try:
+        e = int(open(_RAPL).read())
+    except (OSError, ValueError):
+        return None
+    now = time.monotonic()
+    prev = _rapl_last
+    _rapl_last = (e, now)
+    if prev is None or now <= prev[1]:
+        return None
+    de = e - prev[0]
+    if de < 0:                          # counter wrapped
+        try:
+            de += int(open(
+                "/sys/class/powercap/intel-rapl:0/max_energy_range_uj").read())
+        except (OSError, ValueError):
+            return None
+    return de / (now - prev[1]) / 1e6
 import ringbar
 from build_template_native import build as build_tpl, bg_video_key, bg_path, _user_cfg
 import paths
@@ -217,6 +244,8 @@ def main() -> None:
             write_wirewatch()
             write("cpu_util", f"{m.cpu_pct:.0f}")
             write("cpu_temp", f"{m.cpu_temp:.0f}" if m.cpu_temp else "0")
+            w = cpu_watts()
+            write("cpu_watts", f"{w:.0f}" if w is not None else "0")
             write("ram_used", f"{m.ram_used:.0f}")
             write("ram_pct", f"{m.ram_used / m.ram_total * 100:.0f}" if m.ram_total else "0")
             write("coolant", f"{m.coolant:.1f}" if m.coolant is not None else "0")

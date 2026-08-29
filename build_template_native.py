@@ -276,6 +276,91 @@ def fan_minis(banks):
     return tuple(out[:6])
 
 
+# ── system page v2 (2026-08-29): a pure numbers card, no sparklines ──────────
+# CPU usage/watts/temp, per-GPU usage/watts/temp, memory allocations, and the
+# thermals (chassis / room / coolant / flow). cpu_watts comes from RAPL.
+
+def s_sys_cpu(ctx, y):
+    PAD = ctx.PAD
+    y = ctx.sect(y, "CPU")
+    ctx.stat(0, PAD, y, "USAGE", "cpu_util", "%", size=36, col=FG, vmax=100.0,
+             ranges=RANGES_LOAD)
+    ctx.stat(1, PAD + 160, y, "WATTS", "cpu_watts", "W", size=36, col=DIM,
+             vmax=500.0)
+    ctx.stat(2, PAD + 320, y, "TEMP", "cpu_temp", "°", size=36, vmax=100.0,
+             ranges=RANGES_TEMP)
+    return y + 66
+
+
+def s_sys_gpu(ctx, y, i=0):
+    PAD = ctx.PAD
+    y = ctx.sect(y, f"GPU {i}")
+    ctx.stat(0, PAD, y, "USAGE", f"gpu{i}_util", "%", size=36, col=FG,
+             vmax=100.0, ranges=RANGES_LOAD)
+    ctx.stat(1, PAD + 160, y, "WATTS", f"gpu{i}_power", "W", size=36, col=DIM,
+             vmax=700.0)
+    ctx.stat(2, PAD + 320, y, "TEMP", f"gpu{i}_temp", "°", size=36, vmax=100.0,
+             ranges=RANGES_TEMP)
+    return y + 66
+
+
+def s_sys_mem(ctx, y):
+    PAD, CW, ws = ctx.PAD, ctx.CW, ctx.ws
+    y = ctx.sect(y, "MEMORY")
+    rows = (("RAM", "ram_pct", "ram_used", "G"),
+            ("VRAM 0", "gpu0_vram_pct", "gpu0_vram", "G"),
+            ("VRAM 1", "gpu1_vram_pct", "gpu1_vram", "G"))
+    for n, (lbl, pct, absval, unit) in enumerate(rows):
+        ws.append(label(f"{ctx.sid}ml{n}", lbl, PAD, y + 4, 90, 22, size=15,
+                        color=DIM))
+        ws.append(bar(f"{ctx.sid}mb{n}", cat(pct), PAD + 96, y + 8, CW - 210,
+                      16, ranges=[{"max": None, "color": RED[:3], "alpha": 210}]))
+        ws.append(value(f"{ctx.sid}mv{n}", cat(absval), PAD + CW - 104, y, 104,
+                        30, size=22, unit=unit, align="right", color=FG,
+                        vmax=1000.0))
+        y += 40
+    return y + 10
+
+
+def s_sys_therm(ctx, y):
+    PAD = ctx.PAD
+    y = ctx.sect(y, "THERMALS")
+    ctx.stat(0, PAD, y, "CHASSIS", "case_temp", "°", size=32, vmax=80.0,
+             ranges=RANGES_TEMP, fmt="{:.1}")
+    ctx.stat(1, PAD + 235, y, "ROOM", "room_temp", "°", size=32, col=DIM,
+             vmax=50.0, fmt="{:.1}")
+    y += 62
+    ctx.stat(2, PAD, y, "COOLANT", "coolant", "°", size=32, vmax=60.0,
+             ranges=RANGES_TEMP, fmt="{:.1}")
+    ctx.stat(3, PAD + 235, y, "FLOW", "flow", " L/h", size=32, col=COOL,
+             vmax=300.0, fmt="{:.1}")
+    return y + 66
+
+
+def s_cq_sys_watts(ctx, y):
+    """System-page power row: CPU / GPU0 / GPU1 watts as three mini dials."""
+    xs = (ctx.PAD, ctx.PAD + 151, ctx.PAD + 302)
+    S = 142
+    minis = (("CPU W", "cpu_watts", 500.0), ("GPU 0 W", "gpu0_power", 700.0),
+             ("GPU 1 W", "gpu1_power", 700.0))
+    return _mini_dials(ctx.ws, xs, y, S, minis)
+
+
+def s_cq_sys_therm(ctx, y):
+    """System-page thermal strip: chassis / room / flow (coolant already has a
+    big dial in s_cq_temps)."""
+    PAD, ws = ctx.PAD, ctx.ws
+    rows = (("CHASSIS", "case_temp", "°"), ("ROOM", "room_temp", "°"),
+            ("FLOW", "flow", " L/h"))
+    x = PAD
+    for n, (lbl, metric, unit) in enumerate(rows):
+        ws.append(label(f"{ctx.sid}tl{n}", lbl, x, y, 140, 18, size=12))
+        ws.append(value(f"{ctx.sid}tv{n}", cat(metric), x, y + 18, 140, 34,
+                        size=26, unit=unit, color=FG, vmax=400.0, fmt="{:.1}"))
+        x += 148
+    return y + 62
+
+
 # ═══════════════════════════════ SECTION REGISTRY ════════════════════════════════
 # Every portrait page is an ordered list of sections. Contract:
 #   fn(ctx, y) -> next_y        draws widgets into ctx.ws starting at y
@@ -1204,15 +1289,16 @@ PAGES = {
         Sec("comfy_spark", "S/IT graph", s_comfy_spark, flex=True, min_h=80,
             modes={"comfy"}),
     ],
+    # System v2 (2026-08-29): pure numbers, no sparklines — CPU and per-GPU
+    # usage/watts/temp, memory allocations, thermals + flow.
     "system.default": [
         Sec("header", "Header", s_header),
         Sec("clock", "Clock", s_clock),
-        Sec("gpu0", "GPU 0", P(s_gpu, i=0)),
-        Sec("gpu1", "GPU 1", P(s_gpu, i=1)),
-        Sec("cpu", "CPU + RAM", s_cpu),
-        Sec("loop", "Loop (coolant/pumps)", s_loop),
-        Sec("fans", "Fan banks", s_fans),
-        Sec("history", "History graphs", s_history, flex=True, min_h=280),
+        Sec("sys_cpu", "CPU", s_sys_cpu),
+        Sec("sys_gpu0", "GPU 0", P(s_sys_gpu, i=0)),
+        Sec("sys_gpu1", "GPU 1", P(s_sys_gpu, i=1)),
+        Sec("sys_mem", "Memory allocations", s_sys_mem),
+        Sec("sys_therm", "Thermals + flow", s_sys_therm),
     ],
     "comfy_full.default": [
         Sec("header", "Header", s_header),
@@ -1247,12 +1333,15 @@ PAGES = {
         Sec("cq_temps", "Temperature dials", s_cq_temps),
         Sec("cq_pump", "Pump dial", s_cq_pump),
     ],
+    # System v2 (2026-08-29): adds the watts row and the chassis/room/flow
+    # strip to the simplified dial layout. No sparklines anywhere.
     "system.cluster": [
         Sec("cl_header", "Header + clock", s_cl_header),
         Sec("cq_activity", "Activity dials", s_cq_activity),
+        Sec("cq_sys_watts", "Power dials", s_cq_sys_watts),
         Sec("cq_mem", "VRAM + RAM bars", s_cq_mem),
         Sec("cq_temps", "Temperature dials", s_cq_temps),
-        Sec("cq_pump", "Pump dial", s_cq_pump),
+        Sec("cq_sys_therm", "Chassis / room / flow", s_cq_sys_therm),
     ],
     "comfy_full.cluster": [
         Sec("cl_header", "Header + clock", s_cl_header),
