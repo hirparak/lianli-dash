@@ -637,7 +637,7 @@ def cpu_card(d, box, m: Metrics):
     if m.cpu_temp:
         s = f"{m.cpu_temp:.0f}°C"
         d.text((x1 - 14 - d.textlength(s, font=font(30, True)), y0 + 30), s,
-               font=font(30, True), fill=temp_color(m.cpu_temp, 60, 85))
+               font=font(30, True), fill=temp_color(m.cpu_temp, 70, 85))
     bar(d, x0 + 14, y0 + 78, w - 28, 9, m.cpu_pct / 100, load_color(m.cpu_pct))
     rfrac = m.ram_used / m.ram_total if m.ram_total else 0
     d.text((x0 + 14, y0 + 96), f"RAM {m.ram_used:.0f}/{m.ram_total:.0f}G", font=font(14), fill=DIM)

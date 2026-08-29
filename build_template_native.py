@@ -78,7 +78,7 @@ def _apply_theme(theme, user=None):
     overrides (from config.json `theme_colors`) layered on top. The derived
     range/lamp tables are rebuilt from the merged values."""
     global FG, DIM, COOL, GOOD, WARN, HOT, RED, CARBON, BARBG
-    global RANGES_LOAD, RANGES_TEMP, LAMP
+    global RANGES_LOAD, RANGES_TEMP, RANGES_CPU, LAMP
     p = {**BASE_PALETTE, **THEME_STYLE.get(theme, {})}
     for src, dst in USER_COLOR_SLOTS:
         v = (user or {}).get(src)
@@ -94,6 +94,12 @@ def _apply_theme(theme, user=None):
     RANGES_TEMP = [{"max": 55.0, "color": COOL[:3], "alpha": 245},
                    {"max": 75.0, "color": WARN[:3], "alpha": 245},
                    {"max": None, "color": HOT[:3], "alpha": 255}]
+    # Threadripper (TRX50, Tjmax 95): 70-85 under load is by design, so the
+    # generic 55/75 bands coloured a healthy 77 as hot. Water-cooled GPUs and
+    # coolant keep the generic bands — 75 genuinely IS hot for those.
+    RANGES_CPU = [{"max": 70.0, "color": COOL[:3], "alpha": 245},
+                  {"max": 85.0, "color": WARN[:3], "alpha": 245},
+                  {"max": None, "color": HOT[:3], "alpha": 255}]
     LAMP = [{"max": 0.5, "color": [70, 76, 90], "alpha": 255},
             {"max": 1.5, "color": WARN[:3], "alpha": 255},
             {"max": None, "color": GOOD[:3], "alpha": 255}]
@@ -281,7 +287,7 @@ def fan_minis(banks):
 # with watts/temp stacked beside it; memory gets fat bars; thermals a 2x2 grid.
 
 def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
-                 temp="cpu_temp", wmax=500.0):
+                 temp="cpu_temp", wmax=500.0, tranges=None):
     PAD, ws = ctx.PAD, ctx.ws
     y = ctx.sect(y, title)
     y += 6
@@ -295,12 +301,14 @@ def s_sys_engine(ctx, y, title="CPU", util="cpu_util", watts="cpu_watts",
                     size=44, unit="W", color=DIM, vmax=wmax))
     ws.append(label(f"{ctx.sid}tl", "TEMP", PAD + 258, y + 78, 120, 18, size=13))
     ws.append(value(f"{ctx.sid}tv", cat(temp), PAD + 258, y + 96, 190, 52,
-                    size=44, unit="°", vmax=100.0, ranges=RANGES_TEMP))
+                    size=44, unit="°", vmax=100.0,
+                    ranges=tranges or RANGES_TEMP))
     return y + 204
 
 
 def s_sys_cpu(ctx, y):
-    return s_sys_engine(ctx, y, "CPU", "cpu_util", "cpu_watts", "cpu_temp")
+    return s_sys_engine(ctx, y, "CPU", "cpu_util", "cpu_watts", "cpu_temp",
+                        tranges=RANGES_CPU)
 
 
 def s_sys_gpu(ctx, y, i=0):
@@ -521,7 +529,7 @@ def s_cpu(ctx, y):
     ws.append(value("cu", {"type": "cpu_usage"}, PAD, y, 240, 86, size=76, unit="%",
                     ranges=RANGES_LOAD))
     ws.append(value("ct", {"type": "hwmon", "name": "k10temp", "label": "Tctl"},
-                    PAD, y + 8, CW, 70, size=58, unit="°", ranges=RANGES_TEMP,
+                    PAD, y + 8, CW, 70, size=58, unit="°", ranges=RANGES_CPU,
                     align="right", vmax=100.0))
     y += 92
     ws.append(bar("cb", {"type": "cpu_usage"}, PAD, y, CW, 14))
@@ -943,7 +951,7 @@ def s_cl_cpu(ctx, y):
         ctx, y,
         ("dcp", "CPU", {"type": "cpu_usage"}, dict(vmax=100, unit="%")),
         ("dct", "CPU °C", cat("cpu_temp"),
-         dict(vmax=100, unit="°", redline=0.75, ticks=5, title_size=15)))
+         dict(vmax=100, unit="°", redline=0.85, ticks=5, title_size=15)))
 
 
 def s_cl_coolant_flow(ctx, y):
@@ -1027,7 +1035,7 @@ def s_cq_mem(ctx, y):
 def s_cq_temps(ctx, y):
     y = _dial_row2(ctx, y, TMP,
                    ("qtc", "CPU °C", cat("cpu_temp"),
-                    dict(vmax=100, unit="°", vmin=20.0, redline=0.75)),
+                    dict(vmax=100, unit="°", vmin=20.0, redline=0.85)),
                    ("qtl", "COOLANT", cat("coolant"),
                     dict(vmax=60, unit="°", vmin=20.0, redline=0.62)))
     return _dial_row2(ctx, y, TMP,
@@ -1460,7 +1468,7 @@ def landscape_combined(ws, tpl, mode, slot_names, comfy_job, banks=None) -> dict
                     ranges=RANGES_LOAD))
     ws.append(value("ct", {"type": "hwmon", "name": "k10temp", "label": "Tctl"},
                     x, y + 6, COLW, 54, size=44, unit="°",
-                    ranges=RANGES_TEMP, align="right", vmax=100.0))
+                    ranges=RANGES_CPU, align="right", vmax=100.0))
     y += 72
     ws.append(bar("cb", {"type": "cpu_usage"}, x, y, COLW, 10))
     y += 18
@@ -1588,7 +1596,7 @@ def landscape_cluster(ws, tpl, mode, slot_names, comfy_job, banks=None) -> dict:
                     unit="°", align="center", ranges=RANGES_TEMP,
                     vmax=100.0))
     ws.append(value("tcp", cat("cpu_temp"), xs[2], ty, D, 30, size=22,
-                    unit="°", align="center", ranges=RANGES_TEMP,
+                    unit="°", align="center", ranges=RANGES_CPU,
                     vmax=100.0))
     ws.append(value("tfl", cat("flow"), xs[3], ty, D, 30, size=22, unit=" L/h",
                     align="center", color=COOL, vmax=300.0))
