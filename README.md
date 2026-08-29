@@ -206,7 +206,7 @@ Each theme has **two** loops under `~/.local/share/lianli-dash/backgrounds/`:
 
 The fire loop is the *same scene ignited*, not a different wallpaper, so the switch reads as the
 dashboard catching fire rather than as a wallpaper change. `collect.py` sets `hot` when either
-engine is busy, holds it `HOT_HOLD` (45 s) past the last busy tick so the gaps between chat turns
+engine is busy, holds it `hot_hold_s` (config.json, default 15 s — tuned to calm together with the iCUE fans' status mode) past the last busy tick so short gaps
 don't strobe the panel, and folds it into the template reinstall key — so the swap rides the
 existing ~1.3 s asset hot-swap. A theme with no `_fire.mp4` on disk simply keeps its idle loop.
 

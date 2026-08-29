@@ -45,7 +45,7 @@ def _octo_a_path():
     return None
 
 _OCTO_A = _octo_a_path()
-from build_template_native import build as build_tpl, bg_video_key, bg_path
+from build_template_native import build as build_tpl, bg_video_key, bg_path, _user_cfg
 import paths
 
 _last_rate = 0.0
@@ -58,7 +58,12 @@ _mode = "llama"         # which bottom-section layout is installed
 _comfy_active_at = 0.0
 _comfy_spi = 0.0        # last real s/it (holdover, same idiom as _slot_rate)
 _hot_at = 0.0           # last tick inference was running (drives the fire background)
-HOT_HOLD = 45.0         # seconds the fire background stays up after work stops
+# Seconds the fire look outlives the last busy tick. Default matches the iCUE
+# fans' status-mode EMA (~10-15s visible rain after load ends) so the whole
+# case calms together — the original 45s left the dash burning long after the
+# fans went white. Tunable per config.json `hot_hold_s`; each hot<->calm flip
+# costs the panel daemon a ~2s background re-decode, so don't set it near zero.
+HOT_HOLD_DEFAULT = 15.0
 
 
 OUT = "/run/lianli-dash"
@@ -327,7 +332,11 @@ def main() -> None:
             # back turns should cost zero swaps, not one per turn.
             if generating or comfy_running:
                 _hot_at = now
-            hot = (now - _hot_at) < HOT_HOLD
+            try:
+                hot_hold = float(_user_cfg().get("hot_hold_s", HOT_HOLD_DEFAULT))
+            except (TypeError, ValueError):
+                hot_hold = HOT_HOLD_DEFAULT
+            hot = (now - _hot_at) < max(2.0, hot_hold)
             # Published for other rig consumers (wirewatch themes the WireView
             # displays fire/calm off this) so nobody re-derives the hold logic.
             write("hot", "1" if hot else "0")
